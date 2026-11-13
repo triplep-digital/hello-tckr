@@ -37,7 +37,7 @@ git cat-file -p HEAD
 
 ```text
 tree 9f1c2e...
-parent 4b825d...
+parent 7d3a90...
 author Ada <ada@example.com> 1731484800 +0000
 committer Ada <ada@example.com> 1731484800 +0000
 
@@ -73,7 +73,7 @@ git diff --staged   # index vs. last commit (what you would commit)
 
 Hashes are hard to remember, so git uses references: names that point at commits.
 
-- A **branch** is a movable pointer to a commit. It is stored as a small file such as `.git/refs/heads/main` containing a commit hash.
+- A **branch** is a movable pointer to a commit. It is stored as a small file such as `.git/refs/heads/main` containing a commit hash. (Branches may also be listed in `.git/packed-refs`.)
 - **HEAD** says where you are. Normally it points to the current branch (for example `ref: refs/heads/main`).
 - When you commit, the new commit's parent is the current commit, and the current branch is moved forward to the new commit. HEAD follows because it points at the branch.
 - A **tag** is a name for a commit that normally doesn't move, used for releases like `v1.0`. Lightweight tags are just refs; annotated tags are objects, as above.
@@ -102,7 +102,7 @@ Branches are simply different paths through this graph. `git log --graph --oneli
 
 ## Combining work
 
-Suppose `main` and `feature` have both moved on since they diverged.
+When you bring another branch's work into yours, there are two cases. Here, `feature` is merged into `main`.
 
 ### Fast-forward
 
@@ -122,11 +122,13 @@ If both sides changed the same lines, git can't decide and stops with a conflict
 
 ```text
 <<<<<<< HEAD
-your version
+version from the HEAD side
 =======
-their version
+version from the other side
 >>>>>>> feature
 ```
+
+During a merge, the `HEAD` (ours) side is your current branch and the other side is the branch being merged in. During a rebase the sides swap: `HEAD` is the branch you're rebasing onto (plus commits already replayed), and the other side is your commit being replayed.
 
 To resolve:
 
@@ -143,13 +145,14 @@ A remote is another copy of the repository, identified by a name and a URL. `git
 Git keeps **remote-tracking branches** such as `origin/main`. They record where the remote's branches were the last time you communicated with it. You don't commit to them directly; they update when you fetch, pull or push.
 
 - `git fetch` downloads new commits and updates `origin/*`. It doesn't change your branches or working tree.
-- `git pull` is `git fetch` followed by a merge (or a rebase, with `git pull --rebase`) into your current branch.
+- `git pull` is `git fetch` followed by a merge (or a rebase, with `git pull --rebase`) into your current branch. Since Git 2.33, if the branches have diverged, `git pull` asks you to choose instead of silently merging: set `pull.rebase` or `pull.ff`, or pass `--rebase`, `--no-rebase` or `--ff-only`.
 - `git push` uploads your branch's commits and moves the branch on the remote. It is refused if that would lose commits that the remote has and you don't, so fetch and integrate first.
 
 ## Undoing things
 
-- `git restore <file>` discards uncommitted changes in a file in the working tree.
+- `git restore <file>` discards *unstaged* changes in the working tree, restoring the file from the index.
 - `git restore --staged <file>` unstages a file, keeping your edits.
+- `git restore --staged --worktree <file>` (or `--source=HEAD --staged --worktree`) discards both staged and unstaged changes, returning the file to the last commit.
 - `git revert <commit>` creates a new commit that reverses an earlier one. It is safe for shared history.
 - `git reset <commit>` moves the current branch to another commit. The mode decides what happens to the index and working tree:
   - `--soft`: only the branch moves; changes stay staged.
@@ -162,10 +165,12 @@ Git records every movement of HEAD and branch tips in the reflog. If you reset o
 
 ```bash
 git reflog
-git reset --hard HEAD@{1}
+git reset --hard <entry>    # e.g. HEAD@{5}, the entry you want to return to
 ```
 
-Reflog entries are local and expire eventually (by default after months), but they rescue many mistakes.
+After a rebase, the right entry is the one just before `rebase (start)` in `git reflog`. Right after a rebase you can also use `ORIG_HEAD`, or `<branch>@{1}` (the branch's own reflog), for example `git reset --hard feature@{1}`.
+
+Reflog entries are local and expire eventually: by default after 90 days, or 30 days for entries that are no longer reachable from the branch. Unreachable objects are removed by `git gc` after a further grace period. Even so, the reflog rescues many mistakes.
 
 ## A typical workflow
 
@@ -190,7 +195,7 @@ The `.git` directory is the repository. Your working tree is just a checkout of 
 - `HEAD`: the current branch (or commit, if detached).
 - `config`: this repository's settings, including remotes.
 - `objects/`: the object database of blobs, trees, commits and tags.
-- `refs/`: branches (`refs/heads/`), remote-tracking branches (`refs/remotes/`) and tags (`refs/tags/`).
+- `refs/`: branches (`refs/heads/`), remote-tracking branches (`refs/remotes/`) and tags (`refs/tags/`). Refs may also be bundled into a single `packed-refs` file.
 - `index`: the staging area.
 
 Once you see that a repository is a graph of immutable objects plus a few movable pointers, most git commands become simple operations on that structure.
